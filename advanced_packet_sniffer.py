@@ -7,7 +7,7 @@ from datetime import datetime
 from collections import defaultdict, deque
 import json
 import csv
-from scapy.all import sniff, wrpcap, rdpcap, IP, TCP, UDP, ICMP, DNS, Raw, get_if_list, conf
+from scapy.all import sniff, wrpcap, rdpcap, IP, IPv6, TCP, UDP, ICMP, DNS, Raw, get_if_list, conf
 from scapy.layers.http import HTTPRequest, HTTPResponse
 from port_database import get_port_info, get_protocol_name, is_suspicious_port
 import os
@@ -59,11 +59,19 @@ class PacketParser:
             'payload': b''
         }
         
-        # Check if packet has IP layer
+        # Check if packet has IP layer (IPv4 or IPv6)
         if packet.haslayer(IP):
             packet_info['src'] = packet[IP].src
             packet_info['dst'] = packet[IP].dst
-            
+        elif packet.haslayer(IPv6):
+            packet_info['src'] = packet[IPv6].src
+            packet_info['dst'] = packet[IPv6].dst
+        else:
+            # No IP layer, return early
+            return packet_info
+
+        # Now check transport layer protocols
+        if True:  # Continue with rest of parsing
             # TCP Protocol
             if packet.haslayer(TCP):
                 packet_info['protocol'] = 'TCP'
@@ -500,7 +508,7 @@ class ExportObjectsWindow:
     
     def __init__(self, parent, packet_storage):
         self.window = tk.Toplevel(parent)
-        self.window.title("Export Objects - HTTP")
+        self.window.title("Export Objects - HTTP/SMB/TFTP")
         self.window.geometry("900x500")
         self.packet_storage = packet_storage
         self.objects = []
@@ -589,28 +597,21 @@ class ExportObjectsWindow:
         
         packets = self.packet_storage.get_all_packets()
         
-        http_count = 0
-        raw_count = 0
-        response_count = 0
-        content_count = 0
-        
         for packet in packets:
-            is_http = (
-                packet['protocol'] == 'HTTP' or
-                packet.get('dst_port') == 80 or
-                packet.get('src_port') == 80
+            # Check HTTP, SMB, TFTP packets
+            is_exportable = (
+                packet['protocol'] in ['HTTP', 'SMB', 'TFTP', 'NETBIOS-SSN'] or
+                packet.get('dst_port') in [80, 445, 139, 69] or  # HTTP, SMB, NetBIOS, TFTP
+                packet.get('src_port') in [80, 445, 139, 69]
             )
-            if not is_http:
+            if not is_exportable:
                 continue
-            
-            http_count += 1
             
             try:
                 raw = packet['raw_packet']
                 if not raw.haslayer(Raw):
                     continue
                 
-                raw_count += 1
                 
                 payload = raw[Raw].load
                 payload_str = payload.decode('utf-8', errors='ignore')
@@ -619,9 +620,6 @@ class ExportObjectsWindow:
                 if 'HTTP/' not in payload_str:
                     continue
                 
-                response_count += 1
-                
-                print(f"DEBUG PAYLOAD: {payload_str[:300]}")
                 
                 # Content-Type might be in this packet OR we detect HTML
                 content_type = ''
@@ -644,11 +642,7 @@ class ExportObjectsWindow:
                 
                 # If no Content-Type at all - skip
                 if not content_type:
-                    print(f"DEBUG: No content-type, skipping")
                     continue
-                
-                content_count += 1
-                print(f"DEBUG: Found content-type: {content_type}")
                 
                 # Get body - everything after headers
                 body = ''
@@ -710,17 +704,8 @@ class ExportObjectsWindow:
                 ))
             
             except Exception as e:
-                print(f"DEBUG Exception: {e}")
                 continue
-        
-        # DEBUG SUMMARY
-        print(f"DEBUG SUMMARY:")
-        print(f"  HTTP packets found: {http_count}")
-        print(f"  Packets with Raw payload: {raw_count}")
-        print(f"  HTTP responses: {response_count}")
-        print(f"  Packets with Content-Type: {content_count}")
-        print(f"  Objects extracted: {len(self.objects)}")
-        
+           
         count = len(self.objects)
         if count == 0:
             self.info_label.config(
@@ -1314,8 +1299,11 @@ class PacketSnifferGUI:
         ttk.Label(filter_frame, text="Protocol:").grid(row=0, column=0, padx=2, sticky=tk.W)
         self.protocol_var = tk.StringVar(value="All")
         protocol_combo = ttk.Combobox(filter_frame, textvariable=self.protocol_var,
-                                      values=["All", "TCP", "UDP", "HTTP", "DNS", "ICMP"],
-                                      state="readonly", width=10)
+                              values=["All", "TCP", "UDP", "HTTP", "HTTPS", "DNS", 
+                                     "ICMP", "SSH", "FTP", "SMTP", "IMAP", "POP3",
+                                     "SMB", "MYSQL", "REDIS", "RDP", "MONGODB",
+                                     "WIN-RPC", "SSDP", "MDNS"],
+                              state="readonly", width=12)
         protocol_combo.grid(row=0, column=1, padx=2)
         
         # Source IP filter
