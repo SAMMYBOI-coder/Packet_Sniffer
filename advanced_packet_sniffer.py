@@ -1078,10 +1078,11 @@ class PacketSnifferGUI:
     
     def __init__(self, root):
         self.root = root
-        self.root.title("Advanced Packet Sniffer - Full Featured")
-        self.root.geometry("1400x900")  
-
-
+        self.root.title("🔍 Advanced Packet Sniffer - Professional Edition")
+        self.root.geometry("1400x900")
+        
+        self.MAX_PACKETS = 5000  # ← ADD THIS LINE
+        
         # Data structures
         self.packet_queue = queue.Queue()
         self.packet_storage = PacketStorage()
@@ -1092,13 +1093,24 @@ class PacketSnifferGUI:
         self.is_capturing = False
         self.current_filters = {}
         self.color_map = {
-            'HTTP': '#90EE90',    # Light green
-            'HTTPS': '#98FB98',   # Pale green
-            'DNS': '#87CEEB',     # Sky blue
-            'TCP': '#FFD700',     # Gold
-            'UDP': '#FFA500',     # Orange
-            'ICMP': '#FF6347',    # Tomato
-            'ARP': '#DDA0DD',     # Plum
+        'HTTP': '#90EE90',     # Light green
+        'HTTPS': '#98FB98',    # Pale green
+        'DNS': '#87CEEB',      # Sky blue
+        'TCP': '#FFD700',      # Gold
+        'UDP': '#FFA500',      # Orange
+        'ICMP': '#FF6347',     # Tomato
+        'ARP': '#DDA0DD',      # Plum
+        'SSH': '#20B2AA',      # Light Sea Green
+        'FTP': '#9370DB',      # Medium Purple
+        'SMTP': '#FF69B4',     # Hot Pink
+        'IMAP': '#FF1493',     # Deep Pink
+        'SMB': '#BA55D3',      # Medium Orchid
+        'MYSQL': '#32CD32',    # Lime Green
+        'REDIS': '#DC143C',    # Crimson
+        'RDP': '#4169E1',      # Royal Blue
+        'MONGODB': '#228B22',  # Forest Green
+        'WIN-RPC': '#DAA520',  # Goldenrod
+        'SSDP': '#B0C4DE',     # Light Steel Blue
         }
 
         self.sort_reverse = {}
@@ -1165,86 +1177,6 @@ class PacketSnifferGUI:
     def export_http_objects(self):
         ExportObjectsWindow(self.root, self.packet_storage)
 
-    def update_packet_list(self):
-        """Update packet list from queue with packet limit"""
-        
-        MAX_PACKETS = 1000  # Adjust this as needed
-        MAX_PER_UPDATE = 10  # Process only 10 packets per cycle
-        
-        try:
-            packets_processed = 0
-            
-            while not self.packet_queue.empty() and packets_processed < MAX_PER_UPDATE:
-                packet_info = self.packet_queue.get_nowait()
-                
-                # Check for errors
-                if 'error' in packet_info:
-                    messagebox.showerror("Capture Error", packet_info['error'])
-                    self.stop_capture()
-                    continue
-                
-                # CHECK PACKET LIMIT BEFORE ADDING
-                current_count = self.packet_storage.get_packet_count()
-
-                # DEBUG: Print when approaching limit
-                if current_count >= 990:
-                    print(f"DEBUG: count={current_count}, is_capturing={self.is_capturing}")
-
-                if current_count >= MAX_PACKETS:
-                    print(f"DEBUG: LIMIT HIT! count={current_count}")
-                    if self.is_capturing:
-                        print("DEBUG: Calling stop_capture()")
-                        self.stop_capture()
-                        messagebox.showwarning(
-                            "Packet Limit Reached", 
-                            f"Reached {MAX_PACKETS} packets. Capture stopped."
-                        )
-                    else:
-                        print("DEBUG: Already stopped, skipping packet")
-                    continue
-                
-                # Add packet (your existing code)
-                self.packet_storage.add_packet(packet_info)
-                
-                packet_no = self.packet_storage.get_packet_count()
-                values = (
-                    packet_no,
-                    packet_info['timestamp'],
-                    packet_info['src'],
-                    packet_info['dst'],
-                    packet_info['protocol'],
-                    packet_info['length'],
-                    packet_info['info']
-                )
-                
-                # Color coding
-                tags = []
-                if packet_info.get('suspicious', False):
-                    tags.append('suspicious')
-                elif packet_info['protocol'] in self.color_map:
-                    tags.append(packet_info['protocol'])
-                
-                self.packet_tree.insert('', tk.END, values=values, tags=tags)
-                
-                # Update counters with color warnings
-                self.count_label.config(text=f"Packets: {packet_no}")
-                
-                if packet_no >= MAX_PACKETS:  # ← Fixed: removed self.
-                    self.count_label.config(foreground="red", font=('Arial', 9, 'bold'))
-                elif packet_no >= MAX_PACKETS * 0.8:  # ← Fixed: removed self.
-                    self.count_label.config(foreground="orange")
-                else:
-                    self.count_label.config(foreground="black")
-                
-                self.suspicious_label.config(text=f"⚠️ Alerts: {self.packet_storage.suspicious_count}")
-                
-                packets_processed += 1  # ← Moved to END!
-        
-        except queue.Empty:
-            pass
-        
-        self.root.after(100, self.update_packet_list)  # ← Fixed: added closing )
-
 
     def setup_control_panel(self, parent):
         """Setup control buttons"""
@@ -1252,7 +1184,12 @@ class PacketSnifferGUI:
         control_frame.pack(fill=tk.X)
         
         # Capture controls
-        self.start_btn = ttk.Button(control_frame, text="▶ Start", command=self.start_capture, width=10)
+        self.start_btn = ttk.Button(control_frame, text="▶️ Start Capture", 
+                            command=self.start_capture, width=15)
+        self.stop_btn = ttk.Button(control_frame, text="⏹️ Stop Capture", 
+                                command=self.stop_capture, state=tk.DISABLED, width=15)
+        self.clear_btn = ttk.Button(control_frame, text="🗑️ Clear All", 
+                                    command=self.clear_packets, width=15)
         self.start_btn.pack(side=tk.LEFT, padx=2)
         
         self.stop_btn = ttk.Button(control_frame, text="⏹ Stop", command=self.stop_capture, state=tk.DISABLED, width=10)
@@ -1278,7 +1215,8 @@ class PacketSnifferGUI:
         ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
         
         # Status indicators
-        self.status_label = ttk.Label(control_frame, text="● Ready", foreground="blue")
+        self.status_label = ttk.Label(control_frame, text="● Ready", 
+                              foreground="blue", font=('Arial', 10, 'bold'))
         self.status_label.pack(side=tk.LEFT, padx=10)
         
         self.count_label = ttk.Label(control_frame, text="Packets: 0")
@@ -1527,10 +1465,9 @@ class PacketSnifferGUI:
                 # Make semi-transparent (simplified - just show/hide)
                 pass
     
-        def update_packet_list(self):
+    def update_packet_list(self):
             """Update packet list from queue"""
             
-            MAX_PACKETS = 1000
             MAX_PER_UPDATE = 10
 
             try:
@@ -1546,15 +1483,17 @@ class PacketSnifferGUI:
                     
                     # ✅ CHECK LIMIT BEFORE ADDING
                     current_count = self.packet_storage.get_packet_count()
-                    if current_count >= MAX_PACKETS:
+
+                    # Temporary debug
+
+                    if current_count >= self.MAX_PACKETS:
                         if self.is_capturing:
                             self.stop_capture()
                             messagebox.showwarning(
                                 "Packet Limit Reached", 
-                                f"Reached {MAX_PACKETS} packets. Capture stopped.\n\n"
-                                f"Clear packets and restart to capture more."
+                                f"Reached {self.MAX_PACKETS} packets. Capture stopped."
                             )
-                        continue  # ← Skip this packet
+                        continue
                     
                     # Add packet
                     self.packet_storage.add_packet(packet_info)
@@ -1582,12 +1521,12 @@ class PacketSnifferGUI:
                     # Update count label
                     self.count_label.config(text=f"Packets: {packet_no}")
                     
-                    # Color warnings
-                    if packet_no >= MAX_PACKETS:
+                    # Color warningss
+                    if packet_no >= self.MAX_PACKETS:
                         self.count_label.config(foreground="red", font=('Arial', 9, 'bold'))
-                    elif packet_no >= MAX_PACKETS * 0.8:
+                    elif packet_no >= self.MAX_PACKETS * 0.8:
                         self.count_label.config(foreground="orange", font=('Arial', 9, 'bold'))
-                    elif packet_no >= MAX_PACKETS * 0.5:
+                    elif packet_no >= self.MAX_PACKETS * 0.5:
                         self.count_label.config(foreground="blue")
                     else:
                         self.count_label.config(foreground="black")
