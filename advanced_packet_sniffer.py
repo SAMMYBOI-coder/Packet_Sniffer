@@ -39,6 +39,7 @@ class PacketParser:
         
         return '\n'.join(result)
 
+    @staticmethod
     def parse_packet(packet):
         """
         Extract detailed information from a packet with port-based protocol detection
@@ -71,9 +72,9 @@ class PacketParser:
             return packet_info
 
         # Now check transport layer protocols
-        if True:  # Continue with rest of parsing
-            # TCP Protocol
-            if packet.haslayer(TCP):
+        # Continue with rest of parsing
+        # TCP Protocol
+        if packet.haslayer(TCP):
                 packet_info['protocol'] = 'TCP'
                 packet_info['src_port'] = packet[TCP].sport
                 packet_info['dst_port'] = packet[TCP].dport
@@ -128,7 +129,7 @@ class PacketParser:
                     packet_info['info'] = f"[{packet[TCP].flags}] {packet[TCP].sport} → {packet[TCP].dport}"
             
             # UDP Protocol
-            elif packet.haslayer(UDP):
+        elif packet.haslayer(UDP):
                 packet_info['protocol'] = 'UDP'
                 packet_info['src_port'] = packet[UDP].sport
                 packet_info['dst_port'] = packet[UDP].dport
@@ -175,7 +176,7 @@ class PacketParser:
                         packet_info['info'] = "DNS"
             
             # ICMP Protocol
-            elif packet.haslayer(ICMP):
+        elif packet.haslayer(ICMP):
                 packet_info['protocol'] = 'ICMP'
                 packet_info['service'] = 'Network diagnostics'
                 try:
@@ -1184,7 +1185,7 @@ class PacketSnifferGUI:
         control_frame.pack(fill=tk.X)
         
         # Capture controls
-        self.start_btn = ttk.Button(control_frame, text="▶️ Start Capture", 
+        self.start_btn = ttk.Button(control_frame, text="▶️ Start", 
                             command=self.start_capture, width=15)
         self.stop_btn = ttk.Button(control_frame, text="⏹️ Stop Capture", 
                                 command=self.stop_capture, state=tk.DISABLED, width=15)
